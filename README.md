@@ -146,22 +146,16 @@ um modelo de conjunto de árvores (*tree ensemble*) utiliza $K$
 funções aditivas para realizar as predições:
 
 $$
-\hat{y}_i =
-\phi(\mathbf{x}_i)
-=
-\sum_{k=1}^{K}f_k(\mathbf{x}_i),
-\qquad
-f_k\in\mathcal{F}
+\hat{y}_i = \phi(\mathbf{x}_i)
+= \sum_{k=1}^{K} f_k(\mathbf{x}_i),
+\qquad f_k \in \mathcal{F}
 $$
 
-em que $\mathcal{F}$ representa o espaço de árvores de regressão
-(também conhecidas como árvores CART), definido por:
+em que $\mathcal{F}$ representa o espaço de árvores de regressão (também conhecidas como árvores CART), definido por:
 
 $$
-\mathcal{F}=
-\left\{
-f(\mathbf{x})=w_{q(\mathbf{x})}
-\right\}
+\mathcal{F} =
+\{ f(\mathbf{x}) = w_{q(\mathbf{x})} \}
 $$
 
 com:
