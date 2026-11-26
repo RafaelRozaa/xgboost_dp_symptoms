@@ -129,33 +129,87 @@ Alvo binário resultante: **1.473 positivos (72,6%)** e **555 negativos (27,4%)*
 
 ### Formalização matemática
 
-Seja $\mathcal{D} = \{(\mathbf{x}_i, y_i)\}_{i=1}^{N}$ com $\mathbf{x}_i \in \mathbb{R}^{50}$ (features brutas) e $y_i \in \{0, 1\}$ (depressão binária).
-
-**Modelo XGBoost (gradient boosting aditivo):**
+Dado um conjunto de dados com $n$ observações e $m$ características,
+definido por:
 
 $$
-\hat{y}_i = \sigma\big(F(\mathbf{x}_i)\big),
+\mathcal{D}=\{(\mathbf{x}_i,y_i)\},
 \qquad
-F(\mathbf{x}_i) = \sum_{k=1}^{K} f_k(\mathbf{x}_i),
+|\mathcal{D}|=n,
 \qquad
-f_k \in \mathcal{F}
-$$
-
-em que $\mathcal{F}$ é o espaço de árvores de decisão de profundidade limitada e $\sigma(z) = \frac{1}{1 + e^{-z}}$ é a sigmoide (a probabilidade calibrada é $\hat{p}_i = \sigma(F(\mathbf{x}_i))$).
-
-**Função objetivo regularizada:**
-
-$$
-\mathcal{L} = \sum_{i=1}^{N} \ell(y_i, \hat{p}_i) + \sum_{k=1}^{K} \Omega(f_k),
+\mathbf{x}_i\in\mathbb{R}^{m},
 \qquad
-\ell(y, p) = -\big[y \log p + (1-y) \log(1-p)\big]
+y_i\in\mathbb{R}
 $$
 
+um modelo de conjunto de árvores (*tree ensemble*) utiliza $K$
+funções aditivas para realizar as predições:
+
 $$
-\Omega(f) = \gamma T + \tfrac{1}{2}\lambda \|w\|^2 + \alpha \|w\|_1
+\hat{y}_i =
+\phi(\mathbf{x}_i)
+=
+\sum_{k=1}^{K}f_k(\mathbf{x}_i),
+\qquad
+f_k\in\mathcal{F}
 $$
 
-com $T$ = número de folhas, $w$ = pesos das folhas e $(\gamma, \lambda, \alpha)$ = hiperparâmetros de regularização. Neste projeto: $\gamma = 0$, $\lambda = 1$, $\alpha = 0$.
+em que $\mathcal{F}$ representa o espaço de árvores de regressão
+(também conhecidas como árvores CART), definido por:
+
+$$
+\mathcal{F}=
+\left\{
+f(\mathbf{x})=w_{q(\mathbf{x})}
+\right\}
+$$
+
+com:
+
+$$
+q:\mathbb{R}^{m}\rightarrow T,
+\qquad
+\mathbf{w}\in\mathbb{R}^{T}
+$$
+
+A função $q$ representa a estrutura de cada árvore, responsável
+por direcionar cada observação à folha correspondente. $T$
+representa o número de folhas da árvore. Cada função $f_k$
+corresponde a uma estrutura de árvore independente, definida
+por sua função de direcionamento $q$ e pelos respectivos pesos
+das folhas $\mathbf{w}$. Diferentemente das árvores de decisão tradicionais, cada árvore
+de regressão atribui um valor numérico contínuo (*score*) a cada folha. O elemento $w_j$ representa o valor associado à
+j-ésima folha da árvore.
+
+Para aprender o conjunto de funções utilizadas no modelo,
+minimiza-se a seguinte função objetivo regularizada:
+
+$$
+\mathcal{L}(\phi)=
+\sum_i l(\hat{y}_i,y_i)
++
+\sum_k\Omega(f_k)
+$$
+
+em que:
+
+$$
+\Omega(f)=
+\gamma T+
+\frac{1}{2}\lambda\|\mathbf{w}\|_2^2
+$$
+
+A função $l$ representa uma função de perda convexa e
+diferenciável, responsável por medir a diferença entre a
+predição $\hat{y}_i$ e o valor-alvo $y_i$.
+O segundo termo, $\Omega$, penaliza a complexidade do modelo,
+isto é, das funções representadas pelas árvores de regressão.
+O termo adicional de regularização contribui para suavizar
+os pesos finais aprendidos, ajudando a evitar o sobreajuste
+(*overfitting*).
+Intuitivamente, a função objetivo regularizada tende a
+selecionar modelos que utilizam funções simples e com boa
+capacidade preditiva.
 
 **Hiperparâmetros utilizados:**
 
@@ -175,29 +229,59 @@ com $T$ = número de folhas, $w$ = pesos das folhas e $(\gamma, \lambda, \alpha)
 
 **Regra de decisão operacional:**
 
-$$
-\hat{y}^{\text{bin}}_i = \mathbb{1}\big[\hat{p}_i \geq \tau\big]
-$$
-
-com **threshold $\tau$ escolhido por MCC na validação interna** e capacidade-alvo restrita a $\{0{,}01, \dots, 0{,}90\}$:
-
-$$
-\tau^\star = Q_{1-c}\big(\{\hat{p}_j\}_{j \in \text{val}}\big),
-\qquad
-c^\star = \arg\max_{c \in \mathcal{C}} \text{MCC}_{\text{val}}(c)
-$$
-
-em que $Q$ é o quantil empírico.
-
-**Correção de prior shift de Saerens** (versão iterativa EM, usada na validação externa):
+O critério de classificação usado para tomada de decisão a partir das probabilidades
+foi o Matthews Correlation Coefficient (MCC), uma métrica
+utilizada para avaliar o desempenho de classificadores
+binários, ela é determinada pela seguinte regra:
 
 $$
-\hat{p}^{\text{corr}}(x) =
+\hat{y}_i^{\mathrm{bin}} =
+\mathbb{1}[\hat{p}_i \geq \tau]
+$$
+
+Onde a probabilidade estimada para a observação $i$ é $\hat{p}_i$, o threshold de decisão é $\tau$, enquanto $\mathbb{1}[\cdot]$ é a função indicadora, que retorna 1 quando a condição é satisfeita e 0 caso contrário. A seleção do threshold é realizada na validação interna, buscando maximizar o MCC, considerando uma capacidade-alvo restrita ao conjunto:
+
+$$
+\mathcal{C}=\{0{,}01,0{,}02,\ldots,0{,}90\}
+$$
+
+Para cada capacidade candidata $c\in\mathcal{C}$, o threshold correspondente é determinado pelo quantil empírico de ordem $1-c$ das probabilidades estimadas no conjunto de validação:
+
+$$
+\tau(c)=
+Q_{1-c}
+\left(
+\{\hat{p}_j\}_{j\in\mathrm{val}}
+\right)
+$$
+
+O valor ótimo da capacidade e o respectivo threshold são então definidos por:
+
+$$
+c^\star =
+\underset{c\in\mathcal{C}}{\arg\max}
+\;
+MCC_{\mathrm{val}}(\tau(c))
+$$
+
+$$
+\tau^\star=\tau(c^\star)
+$$
+
+Em que $Q_{1-c}$ representa o quantil empírico de ordem $1-c$, e $MCC_{\mathrm{val}}(\tau(c))$ é o coeficiente de correlação de Matthews calculado na validação interna utilizando o threshold correspondente à capacidade $c$. Dessa forma, o procedimento seleciona o threshold que maximiza o MCC na validação interna, respeitando a restrição de capacidade previamente estabelecida.
+
+**Correção de prior shift de Saerens** (versão iterativa EM, testada na validação externa):
+
+$$
+P(\omega_i \mid x) =
 \frac{
-\hat{p}(x) \cdot (\pi_{\text{ext}} / \pi_{\text{trn}})
+\frac{P(\omega_i)}{P_t(\omega_i)}
+P_t(\omega_i \mid x)
 }{
-\hat{p}(x) \cdot (\pi_{\text{ext}} / \pi_{\text{trn}})
-+ (1-\hat{p}(x)) \cdot ((1-\pi_{\text{ext}}) / (1-\pi_{\text{trn}}))
+\displaystyle
+\sum_{j=1}^{n}
+\frac{P(\omega_j)}{P_t(\omega_j)}
+P_t(\omega_j \mid x)
 }
 $$
 
@@ -410,6 +494,7 @@ jupyter notebook LLM-XGBoost.ipynb
 
 - Chen, T., & Guestrin, C. (2016). **XGBoost: A Scalable Tree Boosting System**. *KDD '16*.
 - Saerens, M., Latinne, P., & Decaestecker, C. (2002). **Adjusting the Outputs of a Classifier to New a Priori Probabilities: A Simple Procedure**. *Neural Computation*, 14(1), 21–41.
+- Chicco, D., Tötsch, N., & Jurman, G. (2021). **The Matthews Correlation Coefficient (MCC) Should Replace the ROC AUC as the Standard Metric for Assessing Binary Classification**. *BMC Genomics*, 22.
 - Cohen, S., Kamarck, T., & Mermelstein, R. (1983). **A Global Measure of Perceived Stress**. *Journal of Health and Social Behavior*, 24(4), 385–396.
 - Spitzer, R. L., Kroenke, K., Williams, J. B. W., & Löwe, B. (2006). **A Brief Measure for Assessing Generalized Anxiety Disorder: The GAD-7**. *Archives of Internal Medicine*, 166(10), 1092–1097.
 - Kroenke, K., Spitzer, R. L., & Williams, J. B. W. (2001). **The PHQ-9: Validity of a Brief Depression Severity Measure**. *Journal of General Internal Medicine*, 16(9), 606–613.
